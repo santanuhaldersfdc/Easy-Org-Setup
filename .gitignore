@@ -36,3 +36,15 @@ $RECYCLE.BIN/
 
 # Local environment variables
 .env
+.vscode/extensions.json
+.vscode/launch.json
+.vscode/settings.json
+config/project-scratch-def.json
+sfdx-project.json
+.prettierrc
+jest.config.js
+package.json
+.gitignore
+.prettierignore
+.forceignore
+force-app/main/default/lwc/.eslintrc.json
