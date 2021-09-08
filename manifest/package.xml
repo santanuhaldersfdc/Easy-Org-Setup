@@ -14,5 +14,9 @@
         <members>Tooling_API</members>
         <name>NamedCredential</name>
     </types>
+    <types>
+        <members>Salesforce</members>
+        <name>AuthProvider</name>
+    </types>
     <version>51.0</version>
 </Package>
