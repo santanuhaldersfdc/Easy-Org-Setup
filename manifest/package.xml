@@ -6,6 +6,8 @@
     </types>
     <types>
         <members>orgSetupHome</members>
+        <members>ldsUtils</members>
+        <members>lwcUtility</members>
         <name>LightningComponentBundle</name>
     </types>
     <types>
