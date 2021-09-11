@@ -8,6 +8,9 @@
         <members>orgSetupHome</members>
         <members>ldsUtils</members>
         <members>lwcUtility</members>
+        <members>dataFetcher</members>
+        <members>disableScheduledApexJobs</members>
+        <members>styleLibrary</members>
         <name>LightningComponentBundle</name>
     </types>
     <types>

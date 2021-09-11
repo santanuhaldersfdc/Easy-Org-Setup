@@ -1,0 +1,9 @@
+@import 'c/styleLibrary';
+.refresh-button
+{
+    width: var(--lwc-squareIconMediumBoundary,2rem);
+    height: var(--lwc-squareIconMediumBoundary,2rem);
+    position: absolute;
+    top: 1rem;
+    right: 2rem;
+}

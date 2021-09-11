@@ -5,15 +5,14 @@ import isOutboundWorkflow from '@salesforce/apex/OrgRefresherHelper.isOutboundWo
 import deactivateWorkflows from '@salesforce/apex/OrgRefresherHelper.deactivateWorkflows';
 
 import fetchScheduledApexJobs from '@salesforce/apex/OrgRefresherHelper.fetchScheduledApexJobs';
-import disableApexJobs from '@salesforce/apex/OrgRefresherHelper.disableApexJobs';
+
 import fetchAllOutboundMsgs from '@salesforce/apex/OrgRefresherHelper.fetchAllOutboundMsgs';
 import updateOutboundEndpoints from '@salesforce/apex/OrgRefresherHelper.updateOutboundEndpoints';
 import fetchCustomSettingList from '@salesforce/apex/OrgRefresherHelper.fetchCustomSettingList';
 import fetchCustomSettingMetadataAndData from '@salesforce/apex/OrgRefresherHelper.fetchCustomSettingMetadataAndData';
 import updateCustomSettings from '@salesforce/apex/OrgRefresherHelper.updateCustomSettings';
-import LwcUtility from 'c/lwcUtility';
-import { ShowToastEvent } from 'lightning/platformShowToastEvent';
-import { NavigationMixin } from 'lightning/navigation';
+import { showErrorToast, showErrorToastWithMsg } from 'c/lwcUtility';
+import { invokeFetchScheduledApexJobs } from 'c/dataFetcher';
 const screens = ['WELCOME', 'OUTBOUND', 'WORKFLOW', 'FIELDUPDATE'];
 function Record() {
     this.Id = '';
@@ -57,7 +56,7 @@ FieldDetail.prototype = {
         return this.type == 'DATETIME';
     }
 }
-export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
+export default class OrgSetupHome extends LightningElement {
 
     //welcome screen variables
     orgName;
@@ -69,12 +68,7 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
     //DSAJ start
     allApexJobs = [];
     errorDSAJ;
-    get disableDSAJ() {
-        let selectedItems = this.allApexJobs.filter(item => {
-            return item.checked;
-        });
-        return selectedItems.length == 0;
-    }
+    DSAJData;
     //DSAJ end
 
     //DAS start
@@ -184,13 +178,10 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
     get showWelcomeScreen() {
         return this.currentScreen == 'WELCOME';
     }
-
     get showDSAJScreen() {
         return this.currentScreen == 'DSAJ';
     }
-    
-    get showDASScreen()
-    {
+    get showDASScreen() {
         return this.currentScreen == 'DAS';
     }
     get showDOWFScreen() {
@@ -219,7 +210,7 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
         }
     }
     get isLoading() {
-        return this.welcomeLoading || this.DASLoading || this.DSAJLoading || this.DOWFLoading || this.UOWFLoading || this.OCSLoading;
+        return false;//this.welcomeLoading || this.DASLoading || this.DSAJLoading || this.DOWFLoading || this.UOWFLoading || this.OCSLoading;
     }
     get isProcessing() {
         return (this.showDOWFScreen && this.showProgressDOWF)
@@ -257,8 +248,7 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
     get getFalse() {
         return false;
     }
-    get modalClass()
-    {
+    get modalClass() {
         switch (this.currentScreen) {
             case 'OCS':
                 return 'slds-modal__container widestModal';
@@ -278,12 +268,14 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
             case 'DSAJ':
                 {
                     console.log('current screen DSAJ');
-                    this.currentScreen = 'DSAJ'
+                    this.currentScreen = 'DSAJ';
                     this.showModal = true;
-                    if (!this.DSAJLoading) {
-                        if (this.errorDSAJ) {
-                            this.showErrorToast(this.errorDSAJ);
-                        }
+
+                    if (this.DSAJData) {
+                        this.initDataToChild(this.DSAJData, 'c-disable-scheduled-apex-jobs');
+                    }
+                    if (this.errorDSAJ) {
+                        this.initErrorToChild(this.errorDSAJ, 'c-disable-scheduled-apex-jobs');
                     }
                     break;
                 }
@@ -294,7 +286,7 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
                     this.showModal = true;
                     if (!this.DASLoading) {
                         if (this.errorDAS) {
-                            this.showErrorToast(this.errorDAS);
+                            showErrorToastWithMsg(this, this.errorDAS);
                         }
                     }
                     break;
@@ -305,7 +297,7 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
                     this.showModal = true;
                     if (!this.DOWFLoading) {
                         if (this.errorDOWF) {
-                            this.showErrorToast(this.errorDOWF);
+                            showErrorToastWithMsg(this, this.errorDOWF);
                         }
                     }
                     break;
@@ -316,7 +308,7 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
                     this.showModal = true;
                     if (!this.UOWFLoading) {
                         if (this.errorUOWF) {
-                            this.showErrorToast(this.errorUOWF);
+                            showErrorToastWithMsg(this, this.errorUOWF);
                         }
                     }
                     break;
@@ -327,7 +319,7 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
                     this.showModal = true;
                     if (!this.OCSLoading) {
                         if (this.errorOCS) {
-                            this.showErrorToast(this.errorOCS);
+                            showErrorToastWithMsg(this, this.errorOCS);
                         }
                     }
                     break;
@@ -335,10 +327,9 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
             case 'SED':
                 {
                     this.currentScreen = 'SED';
-                    this.showModal = true;
                     window.open('/lightning/setup/OrgEmailSettings/home');
                     break;
-                }    
+                }
             default:
                 {
 
@@ -346,48 +337,25 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
         }
 
     }
-    
-    //DSAJ FUNCTIONS - START
-    disableApexJobs() {
-        let selectedItems = this.allApexJobs.filter(item => {
-            return item.checked;
-        });
-        console.log('selectedItems', selectedItems);
-        let selectedCronIds = selectedItems.map(item => {
-            return item.Id;
-        })
-        if (selectedItems) {
-            disableApexJobs({ "cronIdsAsString": JSON.stringify(selectedCronIds) })
-                .then(result => {
-                    console.log(result);
-                    //"{\"successMsg\":null,\"returnValue\":{\"08e2i00000BNxwpAAD\":{\"isSuccess\":true}},\"isSuccess\":true,\"errorMsgs\":null}"
-                    let resultObj = JSON.parse(result);
-                    console.log(resultObj);
-                    if (resultObj.isSuccess) {
-                        if (resultObj.returnValue) {
-                            for (const [key, value] of Object.entries(resultObj.returnValue)) {
-                                console.log(key, value);
-                                this.allApexJobs = this.allApexJobs.map(item => {
-                                    if (item.Id == key) {
-                                        item.status = value.isSuccess ? 'done' : 'failed';
-                                        item.msg = value.isSuccess ? '' : value.errorMsg;
-                                    }
-                                    return item;
-                                });
-                            }
-                        }
-                    }
-                    else {
-                        this.showErrorToast(resultObj.errorMsgs);
-                    }
-                })
-                .catch(error => {
-                    console.log(JSON.stringify(error));
-                    this.showErrorToast(error);
-                });
-        }
+
+    initErrorToChild(error, compName) {
+        setTimeout(() => {
+            let child = this.template.querySelector(compName);
+            if (child) {
+                child.initiateError(error);
+            }
+        }, 100);
     }
-    //DSAJ FUNCTIONS - END
+
+    initDataToChild(data, compName) {
+        setTimeout(() => {
+            let child = this.template.querySelector(compName);
+            if (child) {
+                child.initiateData(data);
+            }
+        }, 100);
+    }
+
 
     //DAS FUNCTIONS - START
     disableReportingJobs() {
@@ -420,12 +388,12 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
                         }
                     }
                     else {
-                        this.showErrorToast(resultObj.errorMsgs);
+                        showErrorToast(this, resultObj.errorMsgs);
                     }
                 })
                 .catch(error => {
                     console.log(JSON.stringify(error));
-                    this.showErrorToast(error);
+                    showErrorToast(this, error);
                 });
         }
     }
@@ -637,7 +605,7 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
             .catch(error => {
                 console.log(error);
                 this.OCSLoading = false;
-                this.showErrorToast(error);
+                showErrorToast(this, error);
             });
     }
     //TODO: check the field value change and revert the selection checkbox if change is reverted
@@ -675,7 +643,7 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
                     resultObj.returnValue.successResults.forEach(item => {
                         this.customSettingRecordList = this.customSettingRecordList.map(mainItem => {
                             if (mainItem.Id == item.Id) {
-                                item.isSuccess?item.status = 'done':item.status = 'failed';
+                                item.isSuccess ? item.status = 'done' : item.status = 'failed';
                                 return item;
                             }
                             return mainItem;
@@ -685,13 +653,13 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
                 }
                 else {
                     this.OCSLoading = false;
-                    this.showErrorToast(resultObj.errorMsgs);
+                    showErrorToast(this, resultObj.errorMsgs);
                 }
             })
             .catch(error => {
                 console.log(error);
                 this.OCSLoading = false;
-                this.showErrorToast(error);
+                showErrorToast(this, error);
             });
     }
     //OCS end
@@ -702,121 +670,39 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
         //DAS
         this.DSAJLoading = true;
         this.DASLoading = true;
-        fetchScheduledApexJobs()
-            .then(result => {
-                let resultObj = JSON.parse(result);
-                console.log('outside', resultObj);
-                if (resultObj.isSuccess) {
-                    this.allApexJobs = [];
-                    console.log(resultObj);
-                    if (resultObj.returnValue['Scheduled Apex']) {
-                        console.log('jobs exists');
-                        resultObj.returnValue['Scheduled Apex'].forEach((item, index) => {
-                            item.NextFireTime = new Date(item.NextFireTime);
-                            item = { ...item, ...{ 'index': index } };
-                            item = { ...item, ...{ 'status': 'init' } };
-                            item = { ...item, ...{ 'checked': true } };
-                            item = { ...item, ...{ 'msg': '' } };
-                            Object.defineProperty(
-                                item,
-                                'isInit',
-                                {
-                                    get: function () {
-                                        return this.status == 'init';
-                                    }
-                                }
-                            );
-                            Object.defineProperty(
-                                item,
-                                'isDone',
-                                {
-                                    get: function () {
-                                        return this.status == 'done';
-                                    }
-                                }
-                            );
-                            Object.defineProperty(
-                                item,
-                                'isFailed',
-                                {
-                                    get: function () {
-                                        return this.status == 'failed';
-                                    }
-                                }
-                            );
-                            this.allApexJobs.push(item);
-                        });
-                        console.log(this.allApexJobs);
-                        this.DSAJLoading = false;
-                    }
-                    else {
-                        //this.showErrorToast("No Scheduled Apex Jobs found!");
-                        this.errorDSAJ = "No Scheduled Apex Jobs found!";
-                        this.DSAJLoading = false;
-                    }
 
-                    if (resultObj.returnValue['Reporting Snapshot']) {
-                        console.log('jobs exists');
-                        resultObj.returnValue['Reporting Snapshot'].forEach((item, index) => {
-                            item.NextFireTime = new Date(item.NextFireTime);
-                            item = { ...item, ...{ 'index': index } };
-                            item = { ...item, ...{ 'status': 'init' } };
-                            item = { ...item, ...{ 'checked': true } };
-                            item = { ...item, ...{ 'msg': '' } };
-                            Object.defineProperty(
-                                item,
-                                'isInit',
-                                {
-                                    get: function () {
-                                        return this.status == 'init';
-                                    }
-                                }
-                            );
-                            Object.defineProperty(
-                                item,
-                                'isDone',
-                                {
-                                    get: function () {
-                                        return this.status == 'done';
-                                    }
-                                }
-                            );
-                            Object.defineProperty(
-                                item,
-                                'isFailed',
-                                {
-                                    get: function () {
-                                        return this.status == 'failed';
-                                    }
-                                }
-                            );
-                            this.allReportingJobs.push(item);
-                        });
-                        console.log(this.allReportingJobs);
-                        this.DASLoading = false;
-                    }
-                    else {
-                        //this.showErrorToast("No Scheduled Apex Jobs found!");
-                        this.errorDAS = "No Scheduled Reporting Snapshots found!";
-                        this.DASLoading = false;
-                    }
+        let DSAJpromise = new Promise((resolve, reject) => {
+            invokeFetchScheduledApexJobs(resolve, reject);
+        });
+        DSAJpromise.then((data) => {
+            //if DSAJ loaded, pass it
+            //else store it for later
+            console.log('resolved');
+            if (this.showDSAJScreen) {
+                console.log('showDSAJScreen');
+                let DSAJScreen = this.template.querySelector('c-disable-scheduled-apex-jobs');
+                console.log('dsaj', DSAJScreen);
+                if (DSAJScreen) {
+                    DSAJScreen.initiateData(data);
                 }
-                else {
-                    this.DSAJLoading = false;
-                    this.DASLoading = false;
-                    this.errorDSAJ = resultObj.errorMsgs;
-                    this.errorDAS = resultObj.errorMsgs;
-                    //this.showErrorToast(resultObj.errorMsgs);
+            }
+            else {
+                this.DSAJData = data;
+            }
+        }).catch((error) => {
+            //if DSAJ loaded, pass it
+            //else store it for later
+            console.log('error', error);
+            if (this.showDSAJScreen) {
+                let DSAJScreen = this.template.querySelector('c-disable-scheduled-apex-jobs');
+                if (DSAJScreen) {
+                    DSAJScreen.initiateError(error);
                 }
-            })
-            .catch(error => {
-                this.DSAJLoading = false;
+            }
+            else {
                 this.errorDSAJ = error;
-                this.DASLoading = false;
-                this.errorDAS = error;
-                //this.showErrorToast(error);
-            });
-        
+            }
+        });
         /*
          this.DOWFLoading = true;
          fetchOutboundWorkflows()
@@ -923,7 +809,7 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
     processOrgInfo({ error, data }) {
         if (data) {
             let result = JSON.parse(data);
-            if (result.returnValue.isSandbox) {
+            if (result.isSuccess) {
                 this.orgName = result.returnValue.orgName;
                 this.orgURL = result.returnValue.orgUrl;
                 this.orgType = result.returnValue.orgType;
@@ -931,11 +817,13 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
                 this.name = result.returnValue.name;
             }
             else {
-                this.showErrorToast(result.errorMsgs);
+                console.log(result);
+                showErrorToast(this, result.errorMsgs);
             }
         }
         else if (error) {
-            this.showErrorToast(error);
+            console.log(error);
+            showErrorToast(this, error);
         }
         this.welcomeLoading = false;
     }
@@ -983,13 +871,7 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
     handleSelectionChange(e) {
         let index = e.target.getAttribute('data-id');
         switch (this.currentScreen) {
-            case 'DSAJ':
-                {
-                    this.allApexJobs[index].checked = e.target.checked;
-                    this.allApexJobs = [...this.allApexJobs];
-                    console.log('all', this.allApexJobs);
-                    break;
-                }
+
             case 'DOWF':
                 {
                     this.filteredWorkflowRules[index].checked = e.target.checked;
@@ -1016,6 +898,10 @@ export default class OrgSetupHome extends NavigationMixin(LwcUtility) {
                 }
         }
 
+    }
+    handleToggleLoading(e) {
+        let det = e.detail;
+        this[det.Loader] = det.value;
     }
     cancel() {
         this.showModal = false;

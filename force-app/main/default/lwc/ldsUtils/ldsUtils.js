@@ -4,10 +4,14 @@
  * @return {String[]} Error messages
  */
  export function reduceErrors(errors) {
+    if(errors instanceof String)
+    {
+        return errors;
+    }
     if (!Array.isArray(errors)) {
         errors = [errors];
     }
-
+    
     return (
         errors
             // Remove null/undefined items
