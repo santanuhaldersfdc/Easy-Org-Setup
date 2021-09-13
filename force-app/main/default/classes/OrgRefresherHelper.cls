@@ -435,17 +435,17 @@ public with sharing class OrgRefresherHelper {
         }
         return JSON.serialize(wrap);
     }
-    private static String makeToolingAPIcall(String endpoint, String method)
+    public static String makeToolingAPIcall(String endpoint, String method)
     {
         HttpRequest req = new HttpRequest();
         req.setEndpoint('callout:Tooling_API'+endpoint);
         req.setMethod(method);
         Http http = new Http();
         HTTPResponse res = http.send(req);
-        System.debug(res.getBody());
+        System.debug(res.getHeader('Location'));
         return res.getBody();
     }
-    private static String makeToolingAPIcall(String endpoint, String method, String jsonBody)
+    public static String makeToolingAPIcall(String endpoint, String method, String jsonBody)
     {
         HttpRequest req = new HttpRequest();
         req.setEndpoint('callout:Tooling_API'+endpoint);

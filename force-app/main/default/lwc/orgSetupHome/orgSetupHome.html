@@ -70,11 +70,13 @@
     <div role="dialog" tabindex="-1" aria-labelledby="header43" class="slds-modal slds-fade-in-open">
       <div class={modalClass}>
         <div class="formClass">
+          <!-- to move to chld-->
           <template if:true={isLoading}>
             <div>
               <lightning-spinner alternative-text="Loading" size="medium" variant="brand"></lightning-spinner>
             </div>
           </template>
+          <!-- to move to child-->
           <template if:true={isProcessing}>
             <div class="slds-spinner_container">
               <lightning-progress-bar value={progress} size="large" variant="circular" class="centerAlign">
@@ -235,84 +237,16 @@
             </ul>
           </template>
           <template if:true={showDOWFScreen}>
-            <ul>
-              <li class="headerItem">
-                <lightning-input type="checkbox" checked="true" onchange={selectAllToggle} class="width10">
-                </lightning-input>
-                <span class="width60">Workflow Rule Name</span>
-                <span class="width10">Active?</span>
-                <span class="width10">Status</span>
-              </li>
-              <template for:each={filteredWorkflowRules} for:item="eachWorkflow">
-                <li key={eachWorkflow.Id} class="listItem selectedListItem" data-id={eachWorkflow.Id}
-                  onclick={toggleSelection}>
-                  <lightning-input type="checkbox" checked={eachWorkflow.checked} onchange={handleSelectionChange}
-                    data-id={eachWorkflow.index} class="width10"></lightning-input>
-                  <span class="width60">{eachWorkflow.Name}</span>
-                  <lightning-input type="checkbox" checked={eachWorkflow.active} class="width10" disabled>
-                  </lightning-input>
-                  <template if:true={eachWorkflow.isInit}>
-                    <lightning-icon class="width10" icon-name="utility:clock" alternative-text="ready" size="x-small"
-                      title="ready"></lightning-icon>
-                  </template>
-                  <template if:true={eachWorkflow.isDone}>
-                    <lightning-icon class="width10" icon-name="utility:check" alternative-text="done" size="x-small"
-                      title="done"></lightning-icon>
-                  </template>
-                  <template if:true={eachWorkflow.isFailed}>
-                    <lightning-icon class="width10" icon-name="utility:warning" alternative-text="error" size="x-small"
-                      title={eachWorkflow.msg}></lightning-icon>
-                  </template>
-
-                </li>
-              </template>
-            </ul>
+            <c-disable-outbound-workflows oncancel={cancel}></c-disable-outbound-workflows>
           </template>
           <template if:true={showDSAJScreen}>
             <c-disable-scheduled-apex-jobs oncancel={cancel}></c-disable-scheduled-apex-jobs>
           </template>
           <template if:true={showDASScreen}>
-            <ul>
-              <li class="headerItem">
-                <lightning-input type="checkbox" checked="true" onchange={selectAllToggle} class="width10">
-                </lightning-input>
-                <span class="width40">Job Name</span>
-                <span class="width40">Next Run</span>
-                <span class="width10">Status</span>
-              </li>
-              <template for:each={allReportingJobs} for:item="eachJob">
-                <li key={eachJob.Id} class="listItem">
-                  <lightning-input type="checkbox" checked={eachJob.checked} onchange={handleSelectionChange}
-                    data-id={eachJob.index} class="width10"></lightning-input>
-                  <span class="width40">{eachJob.CronJobDetail.Name}</span>
-                  <span class="width40">
-                    <lightning-formatted-date-time value={eachJob.NextFireTime} year="numeric" month="numeric"
-                      day="numeric" hour="2-digit" minute="2-digit">
-                    </lightning-formatted-date-time>
-                  </span>
-                  <template if:true={eachJob.isInit}>
-                    <lightning-icon class="width10" icon-name="utility:clock" alternative-text="ready" size="x-small"
-                      title="ready"></lightning-icon>
-                  </template>
-                  <template if:true={eachJob.isDone}>
-                    <lightning-icon class="width10" icon-name="utility:check" alternative-text="done" size="x-small"
-                      title="done"></lightning-icon>
-                  </template>
-                  <template if:true={eachJob.isFailed}>
-                    <lightning-icon class="width10" icon-name="utility:warning" alternative-text="error" size="x-small"
-                      title={eachJob.msg}></lightning-icon>
-                  </template>
-                </li>
-              </template>
-            </ul>
+            <c-disable-analytical-snapshots oncancel={cancel}></c-disable-analytical-snapshots>
           </template>
           <!--
           <div class="slds-modal__footer">
-            <template if:true={showDASScreen}>
-              <lightning-button variant="success" class="footerButton" label="Disable" onclick={disableReportingJobs}
-                disabled={disableDAS}>
-              </lightning-button>
-            </template>
             <template if:true={showDOWFScreen}>
               <lightning-button variant="success" class="footerButton" label="Disable" onclick={deactivateWorkflows}
                 disabled={disableDeactivateWorkflows}>

@@ -1,44 +1,41 @@
-import { api, LightningElement } from 'lwc';
+import { LightningElement, api } from 'lwc';
 import disableApexJobs from '@salesforce/apex/OrgRefresherHelper.disableApexJobs';
 import { showErrorToast } from 'c/lwcUtility';
 import { invokeFetchScheduledApexJobs } from 'c/dataFetcher';
 
-export default class DisableScheduledApexJobs extends LightningElement {
-
+export default class DisableAnalyticalSnapshots extends LightningElement {
     @api initiateData(data) {
         this.prepareData(data);
     }
     @api initiateError(error) {
         this.handleError(error);
     }
-    _allApexJobs;
+    _allReportingJobs;
 
-    sectionOpen = true;
-    loading = true;
-    get headerText() {
-        return 'Disable Scheduled Apex Jobs';
-    }
-    get disableDSAJ() {
+    get disableDAS() {
         let selectedItems = [];
-        if (this._allApexJobs) {
-            selectedItems = this._allApexJobs.filter(item => {
+        if (this._allReportingJobs) {
+            selectedItems = this._allReportingJobs.filter(item => {
                 return item.checked;
             });
         }
         return selectedItems.length == 0;
     }
-    //DSAJ FUNCTIONS - START
-    disableApexJobs() {
-
-        let selectedItems = this._allApexJobs.filter(item => {
+    sectionOpen = true;
+    loading = true;
+    get headerText() {
+        return 'Disable Analytical/Reporting Snapshots';
+    }
+    //DAS FUNCTIONS - START
+    disableReportingJobs() {
+        let selectedItems = this._allReportingJobs.filter(item => {
             return item.checked;
         });
         console.log('selectedItems', selectedItems);
         let selectedCronIds = selectedItems.map(item => {
             return item.Id;
-        });
+        })
         if (selectedItems) {
-            this.loading = true;
             disableApexJobs({ "cronIdsAsString": JSON.stringify(selectedCronIds) })
                 .then(result => {
                     console.log(result);
@@ -49,7 +46,7 @@ export default class DisableScheduledApexJobs extends LightningElement {
                         if (resultObj.returnValue) {
                             for (const [key, value] of Object.entries(resultObj.returnValue)) {
                                 console.log(key, value);
-                                this._allApexJobs = this._allApexJobs.map(item => {
+                                this._allReportingJobs = this._allReportingJobs.map(item => {
                                     if (item.Id == key) {
                                         item.status = value.isSuccess ? 'done' : 'failed';
                                         item.msg = value.isSuccess ? '' : value.errorMsg;
@@ -58,37 +55,19 @@ export default class DisableScheduledApexJobs extends LightningElement {
                                 });
                             }
                         }
-                        this.loading = false;
                     }
                     else {
                         this.handleError(resultObj.errorMsgs);
                     }
                 })
                 .catch(error => {
-                    this.handleError(error);
+                    console.log(JSON.stringify(error));
+                    this.handleError(this, error);
                 });
         }
     }
-    //DSAJ FUNCTIONS - END
+    //DAS FUNCTIONS - END
 
-    selectAllToggle(e) {
-        this._allApexJobs = this._allApexJobs.map(item => {
-            item.checked = e.target.checked;
-            return item;
-        });
-    }
-    handleSelectionChange(e) {
-        let index = e.target.getAttribute('data-id');
-        this._allApexJobs[index].checked = e.target.checked;
-        this._allApexJobs = [...this._allApexJobs];
-        console.log('all', this._allApexJobs);
-    }
-    cancel() {
-        this.sectionOpen = false;
-        let evt = new CustomEvent('cancel');
-        this.dispatchEvent(evt);
-    }
-    
     refresh() {
         this.loading = true;
         let promise = new Promise((resolve, reject) => {
@@ -101,16 +80,15 @@ export default class DisableScheduledApexJobs extends LightningElement {
             this.handleError(error);
         });
     }
+
     prepareData(result) {
         let resultObj = JSON.parse(result);
         console.log('outside', resultObj);
         if (resultObj.isSuccess) {
-            this.allApexJobs = [];
-            console.log(resultObj.returnValue['Scheduled Apex']);
-            if (resultObj.returnValue['Scheduled Apex']) {
+            this._allReportingJobs = [];
+            if (resultObj.returnValue['Reporting Snapshot']) {
                 console.log('jobs exists');
-                this._allApexJobs = [];
-                resultObj.returnValue['Scheduled Apex'].forEach((item, index) => {
+                resultObj.returnValue['Reporting Snapshot'].forEach((item, index) => {
                     item.NextFireTime = new Date(item.NextFireTime);
                     item = { ...item, ...{ 'index': index } };
                     item = { ...item, ...{ 'status': 'init' } };
@@ -143,13 +121,14 @@ export default class DisableScheduledApexJobs extends LightningElement {
                             }
                         }
                     );
-                    this._allApexJobs.push(item);
+                    this._allReportingJobs.push(item);
                 });
-                console.log(this._allApexJobs);
+                console.log(this._allReportingJobs);
                 this.loading = false;
             }
             else {
-                this.handleError("No Scheduled Apex Jobs found!");
+                this.loading = false;
+                this.handleError("No Scheduled Reporting Snapshots found!");
             }
         }
         else {
@@ -163,5 +142,22 @@ export default class DisableScheduledApexJobs extends LightningElement {
         if (this.sectionOpen) {
             showErrorToast(this, error);
         }
+    }
+    selectAllToggle(e) {
+        this._allReportingJobs = this._allReportingJobs.map(item => {
+            item.checked = e.target.checked;
+            return item;
+        });
+    }
+    handleSelectionChange(e) {
+        let index = e.target.getAttribute('data-id');
+        this._allReportingJobs[index].checked = e.target.checked;
+        this._allReportingJobs = [...this._allReportingJobs];
+        console.log('all', this._allReportingJobs);
+    }
+    cancel() {
+        this.sectionOpen = false;
+        let evt = new CustomEvent('cancel');
+        this.dispatchEvent(evt);
     }
 }

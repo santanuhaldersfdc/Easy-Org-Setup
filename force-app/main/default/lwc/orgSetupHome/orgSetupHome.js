@@ -1,7 +1,6 @@
 import { LightningElement, wire } from 'lwc';
 import fetchOrgInformation from '@salesforce/apex/OrgRefresherHelper.fetchOrgInformation';
-import fetchOutboundWorkflows from '@salesforce/apex/OrgRefresherHelper.fetchOutboundWorkflows';
-import isOutboundWorkflow from '@salesforce/apex/OrgRefresherHelper.isOutboundWorkflow';
+
 import deactivateWorkflows from '@salesforce/apex/OrgRefresherHelper.deactivateWorkflows';
 
 import fetchScheduledApexJobs from '@salesforce/apex/OrgRefresherHelper.fetchScheduledApexJobs';
@@ -12,8 +11,12 @@ import fetchCustomSettingList from '@salesforce/apex/OrgRefresherHelper.fetchCus
 import fetchCustomSettingMetadataAndData from '@salesforce/apex/OrgRefresherHelper.fetchCustomSettingMetadataAndData';
 import updateCustomSettings from '@salesforce/apex/OrgRefresherHelper.updateCustomSettings';
 import { showErrorToast, showErrorToastWithMsg } from 'c/lwcUtility';
-import { invokeFetchScheduledApexJobs } from 'c/dataFetcher';
-const screens = ['WELCOME', 'OUTBOUND', 'WORKFLOW', 'FIELDUPDATE'];
+import { invokeFetchScheduledApexJobs, invokeFetchAndFilterOutboundWorkflows } from 'c/dataFetcher';
+
+const DSAJCompName = 'c-disable-scheduled-apex-jobs';
+const DASCompName = 'c-disable-analytical-snapshots';
+const DOWFCompName = 'c-disable-outbound-workflows';
+
 function Record() {
     this.Id = '';
     this.data = [];
@@ -66,39 +69,20 @@ export default class OrgSetupHome extends LightningElement {
     isSandbox;
     environment;
     //DSAJ start
-    allApexJobs = [];
     errorDSAJ;
     DSAJData;
     //DSAJ end
 
     //DAS start
-    allReportingJobs = [];
     errorDAS;
-    get disableDAS() {
-        let selectedItems = this.allReportingJobs.filter(item => {
-            return item.checked;
-        });
-        return selectedItems.length == 0;
-    }
+    DASData;
     //DAS end
 
     //DOWF start
-    allWorkflowRules = [];
-    filteredWorkflowRules = [];
-    workflowsSelected = [];
-    wfFilterTimer;
-    wfChainingIndex = -1;
-    wfFilterIndex = -1;
-    wfProcessed = 0;
+    DOWFData;
     errorDOWF;
-
-    get disableDeactivateWorkflows() {
-        let selectedItems = this.filteredWorkflowRules.filter(item => {
-            return item.checked;
-        });
-        return selectedItems.length == 0;
-    }
-
+    DOWFWarnings;
+    
     //DOWF end
 
     //UOWF start
@@ -197,10 +181,7 @@ export default class OrgSetupHome extends LightningElement {
     //common variables or getters - start
     get currentSectionHeader() {
         switch (this.currentScreen) {
-            case 'DSAJ':
-                return 'Disable Scheduled Apex Jobs';
-            case 'DOWF':
-                return 'Disable Outbound Workflows';
+            
             case 'UOWF':
                 return 'Update Outbound Endpoints';
             case 'OCS':
@@ -272,10 +253,10 @@ export default class OrgSetupHome extends LightningElement {
                     this.showModal = true;
 
                     if (this.DSAJData) {
-                        this.initDataToChild(this.DSAJData, 'c-disable-scheduled-apex-jobs');
+                        this.initDataToChild(this.DSAJData, DSAJCompName);
                     }
                     if (this.errorDSAJ) {
-                        this.initErrorToChild(this.errorDSAJ, 'c-disable-scheduled-apex-jobs');
+                        this.initErrorToChild(this.errorDSAJ, DSAJCompName);
                     }
                     break;
                 }
@@ -284,10 +265,11 @@ export default class OrgSetupHome extends LightningElement {
                     console.log('current screen DAS');
                     this.currentScreen = 'DAS'
                     this.showModal = true;
-                    if (!this.DASLoading) {
-                        if (this.errorDAS) {
-                            showErrorToastWithMsg(this, this.errorDAS);
-                        }
+                    if (this.DASData) {
+                        this.initDataToChild(this.DASData, DASCompName);
+                    }
+                    if (this.errorDAS) {
+                        this.initErrorToChild(this.errorDAS, DASCompName);
                     }
                     break;
                 }
@@ -295,10 +277,14 @@ export default class OrgSetupHome extends LightningElement {
                 {
                     this.currentScreen = 'DOWF';
                     this.showModal = true;
-                    if (!this.DOWFLoading) {
-                        if (this.errorDOWF) {
-                            showErrorToastWithMsg(this, this.errorDOWF);
-                        }
+                    if (this.DOWFData) {
+                        this.initDataToChild(this.DOWFData, DOWFCompName);
+                    }
+                    if (this.errorDOWF) {
+                        this.initErrorToChild(this.errorDOWF, DOWFCompName);
+                    }
+                    if (this.DOWFWarnings) {
+                        this.initDataToChild(this.DOWFWarnings, DOWFCompName);
                     }
                     break;
                 }
@@ -356,175 +342,14 @@ export default class OrgSetupHome extends LightningElement {
         }, 100);
     }
 
-
-    //DAS FUNCTIONS - START
-    disableReportingJobs() {
-        let selectedItems = this.allReportingJobs.filter(item => {
-            return item.checked;
-        });
-        console.log('selectedItems', selectedItems);
-        let selectedCronIds = selectedItems.map(item => {
-            return item.Id;
-        })
-        if (selectedItems) {
-            disableApexJobs({ "cronIdsAsString": JSON.stringify(selectedCronIds) })
-                .then(result => {
-                    console.log(result);
-                    //"{\"successMsg\":null,\"returnValue\":{\"08e2i00000BNxwpAAD\":{\"isSuccess\":true}},\"isSuccess\":true,\"errorMsgs\":null}"
-                    let resultObj = JSON.parse(result);
-                    console.log(resultObj);
-                    if (resultObj.isSuccess) {
-                        if (resultObj.returnValue) {
-                            for (const [key, value] of Object.entries(resultObj.returnValue)) {
-                                console.log(key, value);
-                                this.allReportingJobs = this.allReportingJobs.map(item => {
-                                    if (item.Id == key) {
-                                        item.status = value.isSuccess ? 'done' : 'failed';
-                                        item.msg = value.isSuccess ? '' : value.errorMsg;
-                                    }
-                                    return item;
-                                });
-                            }
-                        }
-                    }
-                    else {
-                        showErrorToast(this, resultObj.errorMsgs);
-                    }
-                })
-                .catch(error => {
-                    console.log(JSON.stringify(error));
-                    showErrorToast(this, error);
-                });
-        }
-    }
-    //DAS FUNCTIONS - END
-
-    //DOWF functions- start
-    filterWorkflows() {
-        this.currentOperation = 'WORKFLOWFILTERING';
-        this.showProgressDOWF = true;
-        this.wfFilterTimer = setInterval(() => { this.wfChainingIndex++; this.isOutboundWorkflow(this.wfChainingIndex); }, 200);
-    }
-    async isOutboundWorkflow(index) {
-        console.log(index);
-        if (index == this.allWorkflowRules.length) {
-            clearInterval(this.wfFilterTimer);
-            this.wfFilterIndex = -1;
-            this.wfChainingIndex = -1;
-            this.workflowUpdateLoading = false;
-            return;
-        }
-        let result = await isOutboundWorkflow({ "wfId": this.allWorkflowRules[index].Id });
-        console.log(result);
-        let resultObj = JSON.parse(result);
-        if (resultObj.isSuccess) {
-            let actions = resultObj.returnValue.workflow.Metadata.actions;
-            let hasOutbound = false;
-            actions.forEach((item) => {
-                if (item.type == "OutboundMessage") {
-                    hasOutbound = true;
-                }
-            });
-            if (hasOutbound) {
-                let item = {};
-                item = { ...item, ...this.allWorkflowRules[index] };
-                item = { ...item, ...{ 'active': resultObj.returnValue.workflow.Metadata.active } };
-                item = { ...item, ...{ 'workflow': resultObj.returnValue.workflow } };
-                item = { ...item, ...{ 'status': 'init' } };
-                item = { ...item, ...{ 'index': ++this.wfFilterIndex } };
-                item = { ...item, ...{ 'checked': true } };
-                item = { ...item, ...{ 'msg': '' } };
-                Object.defineProperty(
-                    item,
-                    'isInit',
-                    {
-                        get: function () {
-                            return this.status == 'init';
-                        }
-                    }
-                );
-                Object.defineProperty(
-                    item,
-                    'isDone',
-                    {
-                        get: function () {
-                            return this.status == 'done';
-                        }
-                    }
-                );
-                Object.defineProperty(
-                    item,
-                    'isFailed',
-                    {
-                        get: function () {
-                            return this.status == 'failed';
-                        }
-                    }
-                );
-                this.filteredWorkflowRules = [...this.filteredWorkflowRules, item];
+    initWarningToChild(data, compName) {
+        setTimeout(() => {
+            let child = this.template.querySelector(compName);
+            if (child) {
+                child.initiateWarning(data);
             }
-        }
-        else {
-            let mainIndex = this.allWorkflowRules[index].index;
-            this.allWorkflowRules[mainIndex].status = 'failed';
-            this.allWorkflowRules[mainIndex].msg = resultObj.errorMsgs.join(',');
-            this.filteredWorkflowRules = [...this.filteredWorkflowRules, ...this.allWorkflowRules[mainIndex]];
-        }
-        if (++this.wfProcessed == this.allWorkflowRules.length) {
-            this.showProgressDOWF = false;
-            this.currentOperation = null;
-            this.wfProcessed = 0;
-        }
+        }, 100);
     }
-    deactivateWorkflows() {
-        console.log(this.filteredWorkflowRules);
-        this.wfChainingIndex = -1;
-        //purposefully slow to track each update
-        this.workflowsSelected = this.filteredWorkflowRules.filter(item => {
-            return item.checked;
-        });
-        console.log('workflowsSelected', this.workflowsSelected.length);
-        this.showProgressDOWF = true;
-        this.currentOperation = 'WORKFLOWDEACTIVATING';
-
-        this.wfFilterTimer = setInterval(() => {
-            this.wfChainingIndex++;
-            this.deactivateOneWorkflow(this.wfChainingIndex);
-        }, 500);
-    }
-
-    async deactivateOneWorkflow(index) {
-        if (index == this.workflowsSelected.length) {
-            clearInterval(this.wfFilterTimer);
-            this.workflowUpdateLoading = false;
-            this.wfChainingIndex = -1;
-            return;
-        }
-        console.log('current', JSON.stringify(this.workflowsSelected[index]));
-        let result = await deactivateWorkflows({ "workflowJSON": JSON.stringify(this.workflowsSelected[index].workflow), "wfId": this.workflowsSelected[index].Id });
-        console.log('result', result);
-        let resultObj = JSON.parse(result);
-        if (resultObj.isSuccess) {
-            let mainIndex = this.workflowsSelected[index].index;
-            this.filteredWorkflowRules[mainIndex].status = 'done';
-            this.filteredWorkflowRules[mainIndex].checked = false;
-            this.filteredWorkflowRules[mainIndex].active = false;
-            this.filteredWorkflowRules = [...this.filteredWorkflowRules];
-        }
-        else {
-            let mainIndex = this.workflowsSelected[index].index;
-            this.filteredWorkflowRules[mainIndex].status = 'failed';
-            this.filteredWorkflowRules[mainIndex].msg = resultObj.errorMsgs.join(',');
-            this.filteredWorkflowRules[mainIndex].checked = false;
-            this.filteredWorkflowRules = [...this.filteredWorkflowRules];
-        }
-        if (++this.wfProcessed == this.workflowsSelected.length) {
-            this.wfProcessed = 0;
-            this.showProgressDOWF = false;
-            this.currentOperation = null;
-        }
-    }
-    //DOWF functions- end
 
     //UOWF start
     handleEndpointChange(e) {
@@ -668,9 +493,6 @@ export default class OrgSetupHome extends LightningElement {
         console.log('connected callback called');
         //DSAJ
         //DAS
-        this.DSAJLoading = true;
-        this.DASLoading = true;
-
         let DSAJpromise = new Promise((resolve, reject) => {
             invokeFetchScheduledApexJobs(resolve, reject);
         });
@@ -680,7 +502,7 @@ export default class OrgSetupHome extends LightningElement {
             console.log('resolved');
             if (this.showDSAJScreen) {
                 console.log('showDSAJScreen');
-                let DSAJScreen = this.template.querySelector('c-disable-scheduled-apex-jobs');
+                let DSAJScreen = this.template.querySelector(DSAJCompName);
                 console.log('dsaj', DSAJScreen);
                 if (DSAJScreen) {
                     DSAJScreen.initiateData(data);
@@ -689,12 +511,26 @@ export default class OrgSetupHome extends LightningElement {
             else {
                 this.DSAJData = data;
             }
+
+            //if DAS loaded, pass it
+            //else store it for later
+            if (this.showDASScreen) {
+                console.log('showDASScreen');
+                let DASScreen = this.template.querySelector(DASCompName);
+                console.log('DASScreen', DASScreen);
+                if (DASScreen) {
+                    DASScreen.initiateData(data);
+                }
+            }
+            else {
+                this.DASData = data;
+            }
         }).catch((error) => {
             //if DSAJ loaded, pass it
             //else store it for later
             console.log('error', error);
             if (this.showDSAJScreen) {
-                let DSAJScreen = this.template.querySelector('c-disable-scheduled-apex-jobs');
+                let DSAJScreen = this.template.querySelector(DSAJCompName);
                 if (DSAJScreen) {
                     DSAJScreen.initiateError(error);
                 }
@@ -702,7 +538,55 @@ export default class OrgSetupHome extends LightningElement {
             else {
                 this.errorDSAJ = error;
             }
+            //if DAS loaded, pass it
+            //else store it for later
+            if (this.showDASScreen) {
+                let DASScreen = this.template.querySelector(DASCompName);
+                if (DASScreen) {
+                    DASScreen.initiateError(error);
+                }
+            }
+            else {
+                this.errorDAS = error;
+            }
         });
+
+        //DOWF
+        let DOWFpromise = new Promise((resolve, reject)=>{
+            invokeFetchAndFilterOutboundWorkflows(resolve, reject);
+        });
+        DOWFpromise.then((data, warnings)=>{
+            //if DOWF loaded, pass it
+            //else store it for later
+            if(this.showDOWFScreen)
+            {
+                let DOWFScreen = this.template.querySelector(DOWFCompName);
+                console.log('DOWF', DOWFScreen);
+                if (DOWFScreen) {
+                    DOWFScreen.initiateData(data);
+                    DOWFScreen.initiateWarning(warnings);
+                }
+            }
+            else{
+                this.DOWFData = data;
+                this.DOWFWarnings = warnings;
+            }
+        }).catch((error)=>{
+            //if DOWF loaded, pass it
+            //else store it for later
+            console.log('error', error);
+            if (this.showDOWFScreen) {
+                let DOWFScreen = this.template.querySelector(DOWFCompName);
+                if (DOWFScreen) {
+                    DOWFScreen.initiateError(error);
+                }
+            }
+            else {
+                this.errorDOWF = error;
+            }
+        });
+
+
         /*
          this.DOWFLoading = true;
          fetchOutboundWorkflows()
@@ -829,14 +713,6 @@ export default class OrgSetupHome extends LightningElement {
     }
     selectAllToggle(e) {
         switch (this.currentScreen) {
-            case 'DSAJ':
-                {
-                    this.allApexJobs = this.allApexJobs.map(item => {
-                        item.checked = e.target.checked;
-                        return item;
-                    });
-                    break;
-                }
             case 'DOWF':
                 {
                     this.filteredWorkflowRules = this.filteredWorkflowRules.map(item => {
@@ -899,10 +775,7 @@ export default class OrgSetupHome extends LightningElement {
         }
 
     }
-    handleToggleLoading(e) {
-        let det = e.detail;
-        this[det.Loader] = det.value;
-    }
+    
     cancel() {
         this.showModal = false;
         this.currentScreen = '';
